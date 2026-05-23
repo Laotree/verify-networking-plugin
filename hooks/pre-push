@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Blocks direct pushes to main/master. All changes must go through a PR.
+
+protected="^(main|master)$"
+
+while read -r _local_ref _local_sha _remote_ref _remote_sha; do
+    branch="${_remote_ref#refs/heads/}"
+    if [[ "$branch" =~ $protected ]]; then
+        echo ""
+        echo "  🔴 Direct push to '$branch' is not allowed."
+        echo "     Open a PR and let Con review and merge."
+        echo ""
+        exit 1
+    fi
+done
+
+exit 0

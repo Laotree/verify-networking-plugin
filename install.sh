@@ -78,6 +78,15 @@ if [[ "$added" == false ]]; then
     echo "$SNIPPET"
 fi
 
+# Git pre-push hook — blocks direct pushes to main/master
+GIT_DIR="$(git -C "$SCRIPT_DIR" rev-parse --git-dir 2>/dev/null || true)"
+if [[ -n "$GIT_DIR" ]]; then
+    ln -sf "$SCRIPT_DIR/hooks/pre-push" "$GIT_DIR/hooks/pre-push"
+    echo "→ Installed git pre-push hook"
+else
+    echo "→ Not a git repo — skipping git hook install"
+fi
+
 echo ""
 echo "✓ Done. Type 'claude' as usual — network check runs before every session."
 echo ""
