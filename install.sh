@@ -113,6 +113,10 @@ added=false
 [[ "$SHELL" == *zsh*  && -f "$HOME/.zshrc"  ]] && { add_to_rc "$HOME/.zshrc";  patch_claude_aliases "$HOME/.zshrc";  added=true; }
 [[ "$SHELL" == *bash* && -f "$HOME/.bashrc" ]] && { add_to_rc "$HOME/.bashrc"; patch_claude_aliases "$HOME/.bashrc"; added=true; }
 [[ "$SHELL" == *bash* && -f "$HOME/.bash_profile" && "$added" == false ]] && { add_to_rc "$HOME/.bash_profile"; patch_claude_aliases "$HOME/.bash_profile"; }
+if [[ -f "$HOME/.profile" ]]; then
+    [[ "$added" == false ]] && { add_to_rc "$HOME/.profile"; added=true; }
+    patch_claude_aliases "$HOME/.profile"
+fi
 
 if [[ "$added" == false ]]; then
     echo ""
