@@ -1,0 +1,14 @@
+{
+  "name": "verify-networking",
+  "description": "Network check before Claude Code starts — DNS, exit IP region, and TCP connectivity with red/yellow/green status",
+  "version": "0.1.0",
+  "author": {
+    "name": "raypar"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Laotree/verify-networking-plugin"
+  },
+  "homepage": "https://github.com/Laotree/verify-networking-plugin",
+  "license": "MIT"
+}
