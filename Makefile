@@ -1,4 +1,4 @@
-.PHONY: build release test fmt lint clean install
+.PHONY: build release test fmt lint clean install hooks
 
 build:
 	cargo build
@@ -17,6 +17,9 @@ lint:
 
 clean:
 	cargo clean
+
+hooks:
+	ln -sf "$(PWD)/hooks/pre-push" .git/hooks/pre-push
 
 install:
 	./install.sh
