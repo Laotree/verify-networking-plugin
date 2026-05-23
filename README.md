@@ -58,7 +58,9 @@ claude() {
 
 ## Usage
 
-Type `claude` as usual. The check runs automatically before every session:
+Type `claude` as usual. The check runs automatically before every session.
+
+**All checks passed (green):**
 
 ```
   Verifying network before Claude starts...
@@ -66,10 +68,40 @@ Type `claude` as usual. The check runs automatically before every session:
   Checking...
 
   🟢 DNS            api.anthropic.com → 18.165.56.1
-  🟢 Exit IP        1.2.3.4 [US] AS54113 Fastly
+  🟢 Exit IP        1.2.3.4 [US] AS12345 Example ISP
+  🟢 Connectivity   api.anthropic.com avg 217ms  loss 0%
+
+  🟢 All checks passed.
+```
+
+**Concerns detected (yellow) — prompts before continuing:**
+
+```
+  Verifying network before Claude starts...
+
+  Checking...
+
+  🟢 DNS            api.anthropic.com → 18.165.56.1
+  🟡 Exit IP        1.2.3.4[US] AS12345 Example ISP
   🟡 Connectivity   api.anthropic.com avg 612ms  loss 0%
 
   🟡 Network concerns detected.
+
+  [C]ontinue  [R]etry  [Q]uit ›
+```
+
+**Hard failure (red) — prompts before continuing:**
+
+```
+  Verifying network before Claude starts...
+
+  Checking...
+
+  🟢 DNS            api.anthropic.com → 18.165.56.1
+  🟢 Exit IP        1.2.3.4 [US] AS12345 Example ISP
+  🔴 Connectivity   api.anthropic.com avg —  loss 100%
+
+  🔴 Hard failure detected.
 
   [C]ontinue  [R]etry  [Q]uit ›
 ```
