@@ -66,10 +66,53 @@ add_to_rc() {
     fi
 }
 
+# Wrap aliases whose RHS invokes 'claude' (e.g. alias a1m='aivo claude ...')
+# Replaces the alias with a shell function that runs the checker first.
+patch_claude_aliases() {
+    local rc="$1"
+    [[ -f "$rc" ]] || return 0
+
+    local aliases
+    aliases=$(grep -E "^[[:space:]]*alias [^=]+=['\"].*claude.*['\"]" "$rc" 2>/dev/null || true)
+    [[ -z "$aliases" ]] && return 0
+
+    while IFS= read -r line; do
+        local alias_name alias_cmd
+        if [[ "$line" =~ ^[[:space:]]*alias[[:space:]]+([^=[:space:]]+)=\'(.+)\'[[:space:]]*$ ]]; then
+            alias_name="${BASH_REMATCH[1]}"
+            alias_cmd="${BASH_REMATCH[2]}"
+        elif [[ "$line" =~ ^[[:space:]]*alias[[:space:]]+([^=[:space:]]+)=\"(.+)\"[[:space:]]*$ ]]; then
+            alias_name="${BASH_REMATCH[1]}"
+            alias_cmd="${BASH_REMATCH[2]}"
+        else
+            continue
+        fi
+
+        [[ "$alias_name" == "claude" ]] && continue
+
+        local fn_marker="# verify-networking-alias:${alias_name}"
+        if grep -qF "$fn_marker" "$rc" 2>/dev/null; then
+            echo "→ Alias wrapper for '${alias_name}' already present in $rc"
+        else
+            cat >> "$rc" << FNSNIPPET
+
+${fn_marker}
+unalias ${alias_name} 2>/dev/null || true
+${alias_name}() {
+    local checker="\$HOME/.claude/plugins/verify-networking"
+    [[ -x "\$checker" ]] && { "\$checker" || return 1; }
+    ${alias_cmd} "\$@"
+}
+FNSNIPPET
+            echo "→ Added wrapper function for alias '${alias_name}' in $rc"
+        fi
+    done <<< "$aliases"
+}
+
 added=false
-[[ "$SHELL" == *zsh*  && -f "$HOME/.zshrc"  ]] && { add_to_rc "$HOME/.zshrc";  added=true; }
-[[ "$SHELL" == *bash* && -f "$HOME/.bashrc" ]] && { add_to_rc "$HOME/.bashrc"; added=true; }
-[[ "$SHELL" == *bash* && -f "$HOME/.bash_profile" && "$added" == false ]] && add_to_rc "$HOME/.bash_profile"
+[[ "$SHELL" == *zsh*  && -f "$HOME/.zshrc"  ]] && { add_to_rc "$HOME/.zshrc";  patch_claude_aliases "$HOME/.zshrc";  added=true; }
+[[ "$SHELL" == *bash* && -f "$HOME/.bashrc" ]] && { add_to_rc "$HOME/.bashrc"; patch_claude_aliases "$HOME/.bashrc"; added=true; }
+[[ "$SHELL" == *bash* && -f "$HOME/.bash_profile" && "$added" == false ]] && { add_to_rc "$HOME/.bash_profile"; patch_claude_aliases "$HOME/.bash_profile"; }
 
 if [[ "$added" == false ]]; then
     echo ""
@@ -88,7 +131,7 @@ else
 fi
 
 echo ""
-echo "✓ Done. Type 'claude' as usual — network check runs before every session."
+echo "✓ Done. Network check runs before every Claude session (claude + detected alias wrappers)."
 echo ""
-echo "  To remove: delete the claude() function from your shell RC"
+echo "  To remove: delete the claude() function and any alias wrapper functions from your shell RC"
 echo "             and rm $BINARY_PATH"
