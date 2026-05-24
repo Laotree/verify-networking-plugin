@@ -251,11 +251,13 @@ create_codex_app_wrapper() {
 
     echo "→ Codex desktop app found at $codex_app"
 
-    local wrapper_dir="$HOME/Applications/Verify & Launch Codex.app/Contents/MacOS"
-    local plist_dir="$HOME/Applications/Verify & Launch Codex.app/Contents"
-    mkdir -p "$wrapper_dir"
+    local bundle_root="$HOME/Applications/Verify & Launch Codex.app"
+    local wrapper_dir="$bundle_root/Contents/MacOS"
+    local plist_dir="$bundle_root/Contents"
+    local resources_dir="$bundle_root/Contents/Resources"
+    mkdir -p "$wrapper_dir" "$resources_dir"
 
-    # Info.plist
+    # Info.plist — references AppIcon so macOS picks up our custom .icns
     cat > "$plist_dir/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -268,6 +270,8 @@ create_codex_app_wrapper() {
     <string>Verify &amp; Launch Codex</string>
     <key>CFBundleExecutable</key>
     <string>launcher</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
     <string>com.verify-networking.codex-launcher</string>
     <key>CFBundlePackageType</key>
@@ -285,6 +289,26 @@ PLIST
     # Launcher script (the actual executable)
     cp "$SCRIPT_DIR/scripts/codex-launcher.sh" "$wrapper_dir/launcher"
     chmod +x "$wrapper_dir/launcher"
+
+    # App icon — Codex logo + shield badge (requires ImageMagick 7 / magick)
+    local icon_script="$SCRIPT_DIR/scripts/make-icon.sh"
+    local icon_out="$resources_dir/AppIcon.icns"
+    if command -v magick &>/dev/null && [[ -x "$icon_script" ]]; then
+        "$icon_script" "$icon_out" "$codex_app" \
+            && echo "→ App icon generated (Codex logo + shield badge)" \
+            || {
+                echo "→ Icon generation failed — falling back to plain Codex icon"
+                cp "$codex_app/Contents/Resources/icon.icns" "$icon_out" 2>/dev/null || true
+            }
+    else
+        # No ImageMagick: copy Codex icon as-is
+        cp "$codex_app/Contents/Resources/icon.icns" "$icon_out" 2>/dev/null \
+            && echo "→ Copied Codex icon (install ImageMagick for the shield-badge variant)" \
+            || echo "→ Could not copy Codex icon — app will use default macOS icon"
+    fi
+
+    # Tell macOS to refresh the icon cache for the new bundle
+    touch "$bundle_root" 2>/dev/null || true
 
     echo "→ Created ~/Applications/Verify & Launch Codex.app"
     echo ""
