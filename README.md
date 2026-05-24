@@ -2,29 +2,39 @@
 
 # verify-networking
 
-Network check before Claude Code starts — DNS resolution, exit IP region, and TCP connectivity, with 🟢🟡🔴 status.
+Network pre-flight check for AI CLI tools — runs before **Claude Code** and **Codex CLI** start, verifying DNS resolution, exit IP region, and TCP connectivity with 🟢🟡🔴 status.
 
 ## How It Works
 
-`install.sh` adds a `claude()` shell function to your RC file that wraps every `claude` invocation:
+`install.sh` adds shell wrapper functions to your RC file that intercept `claude` and `codex` invocations before the process starts:
 
 ```bash
 claude() {
     local checker="$HOME/.claude/plugins/verify-networking"
-    [[ -x "$checker" ]] && { "$checker" || return 1; }
+    [[ -x "$checker" ]] && { "$checker" claude || return 1; }
     command claude "$@"
+}
+
+codex() {
+    local checker="$HOME/.claude/plugins/verify-networking"
+    [[ -x "$checker" ]] && { "$checker" codex || return 1; }
+    command codex "$@"
 }
 ```
 
-Before Claude Code starts, it runs three checks concurrently:
+Each wrapper passes its tool name as an argument so the binary knows which API endpoint to probe.
 
-1. **DNS** — resolves `api.anthropic.com` via the system resolver
-2. **Exit IP** — queries `ipinfo.io` and blocks if the country is CN, HK, KP, CU, IR, SY, RU, or BY (regions where Claude is unavailable)
-3. **Connectivity** — 3 concurrent TCP probes to `api.anthropic.com:443`, reports avg latency and loss %
+Before either tool starts, three checks run concurrently:
+
+| Check | Claude target | Codex target |
+|-------|--------------|--------------|
+| **DNS** | `api.anthropic.com` | `api.openai.com` |
+| **Exit IP** | `ipinfo.io` — blocks CN, HK, KP, CU, IR, SY, RU, BY | same |
+| **Connectivity** | 3 × TCP to `api.anthropic.com:443` | 3 × TCP to `api.openai.com:443` |
 
 | Status | Meaning | Behaviour |
 |--------|---------|-----------|
-| 🟢 Green | All checks passed | Claude starts immediately |
+| 🟢 Green | All checks passed | Tool starts immediately |
 | 🟡 Yellow | Concerns (high latency / partial loss) | Prompts `[C]ontinue [R]etry [Q]uit` |
 | 🔴 Red | Hard failure (DNS / blocked region / no connectivity) | Prompts `[C]ontinue [R]etry [Q]uit` |
 
@@ -39,6 +49,8 @@ cd verify-networking-plugin
 source ~/.zshrc   # or ~/.bashrc
 ```
 
+`install.sh` automatically detects whether `codex` is on your `$PATH` and adds its wrapper alongside the `claude` wrapper. If you install Codex later, re-run `./install.sh`.
+
 ### Manual
 
 ```bash
@@ -46,21 +58,29 @@ cargo build --release
 cp target/release/verify-networking ~/.claude/plugins/
 ```
 
-Then add to your shell RC:
+Then add to your shell RC — include only the wrappers for tools you have installed:
 
 ```bash
+# Claude Code
 claude() {
     local checker="$HOME/.claude/plugins/verify-networking"
-    [[ -x "$checker" ]] && { "$checker" || return 1; }
+    [[ -x "$checker" ]] && { "$checker" claude || return 1; }
     command claude "$@"
+}
+
+# Codex CLI (add if you use Codex)
+codex() {
+    local checker="$HOME/.claude/plugins/verify-networking"
+    [[ -x "$checker" ]] && { "$checker" codex || return 1; }
+    command codex "$@"
 }
 ```
 
 ## Usage
 
-Type `claude` as usual. The check runs automatically before every session.
+Type `claude` or `codex` as usual. The check runs automatically before every session.
 
-**All checks passed (green):**
+**All checks passed (green) — Claude:**
 
 ```
   Verifying network before Claude starts...
@@ -70,6 +90,20 @@ Type `claude` as usual. The check runs automatically before every session.
   🟢 DNS            api.anthropic.com → 18.165.56.1
   🟢 Exit IP        1.2.3.4 [US] AS12345 Example ISP
   🟢 Connectivity   api.anthropic.com avg 217ms  loss 0%
+
+  🟢 All checks passed.
+```
+
+**All checks passed (green) — Codex:**
+
+```
+  Verifying network before Codex starts...
+
+  Checking...
+
+  🟢 DNS            api.openai.com → 104.18.7.192
+  🟢 Exit IP        1.2.3.4 [US] AS12345 Example ISP
+  🟢 Connectivity   api.openai.com avg 183ms  loss 0%
 
   🟢 All checks passed.
 ```
@@ -90,7 +124,7 @@ Type `claude` as usual. The check runs automatically before every session.
   [C]ontinue  [R]etry  [Q]uit ›
 ```
 
-**Hard failure (red) — prompts before continuing:**
+**Hard failure (red) — blocked region:**
 
 ```
   Verifying network before Claude starts...
@@ -98,10 +132,10 @@ Type `claude` as usual. The check runs automatically before every session.
   Checking...
 
   🟢 DNS            api.anthropic.com → 18.165.56.1
-  🟢 Exit IP        1.2.3.4 [US] AS12345 Example ISP
-  🔴 Connectivity   api.anthropic.com avg —  loss 100%
+  🔴 Exit IP        1.2.3.4 [CN] AS12345 Example ISP — Claude unavailable in this region
+  🟢 Connectivity   api.anthropic.com avg 201ms  loss 0%
 
-  🔴 Hard failure detected.
+  🔴 Network issues detected.
 
   [C]ontinue  [R]etry  [Q]uit ›
 ```
@@ -125,5 +159,5 @@ make hooks    # install git pre-push hook
 # Remove binary
 rm ~/.claude/plugins/verify-networking
 
-# Remove shell function — delete the claude() block from ~/.zshrc (or ~/.bashrc)
+# Remove shell functions — delete the claude() and codex() blocks from ~/.zshrc (or ~/.bashrc)
 ```
