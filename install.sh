@@ -185,6 +185,80 @@ if [[ "$added" == false ]]; then
     fi
 fi
 
+# ---------------------------------------------------------------------------
+# Codex Desktop App wrapper (.app bundle)
+# ---------------------------------------------------------------------------
+# Searches common install locations for Codex.app and, if found, creates
+# ~/Applications/Verify & Launch Codex.app — a thin shell-script app that
+# runs the network check before opening the real Codex desktop app.
+# ---------------------------------------------------------------------------
+create_codex_app_wrapper() {
+    local codex_app=""
+    for candidate in \
+        "/Applications/Codex.app" \
+        "$HOME/Applications/Codex.app"
+    do
+        if [[ -d "$candidate" ]]; then
+            codex_app="$candidate"
+            break
+        fi
+    done
+
+    if [[ -z "$codex_app" ]]; then
+        echo "→ Codex desktop app not found — skipping .app wrapper"
+        return 0
+    fi
+
+    echo "→ Codex desktop app found at $codex_app"
+
+    local wrapper_dir="$HOME/Applications/Verify & Launch Codex.app/Contents/MacOS"
+    local plist_dir="$HOME/Applications/Verify & Launch Codex.app/Contents"
+    mkdir -p "$wrapper_dir"
+
+    # Info.plist
+    cat > "$plist_dir/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>Verify &amp; Launch Codex</string>
+    <key>CFBundleDisplayName</key>
+    <string>Verify &amp; Launch Codex</string>
+    <key>CFBundleExecutable</key>
+    <string>launcher</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.verify-networking.codex-launcher</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleVersion</key>
+    <string>1.0</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>10.15</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+</dict>
+</plist>
+PLIST
+
+    # Launcher script (the actual executable)
+    cp "$SCRIPT_DIR/scripts/codex-launcher.sh" "$wrapper_dir/launcher"
+    chmod +x "$wrapper_dir/launcher"
+
+    echo "→ Created ~/Applications/Verify & Launch Codex.app"
+    echo ""
+    echo "  ┌─────────────────────────────────────────────────────────────────────┐"
+    echo "  │  One-time Dock setup:                                               │"
+    echo "  │  1. Open Finder → Go → Applications (or ~/Applications)            │"
+    echo "  │  2. Drag 'Verify & Launch Codex' to your Dock                      │"
+    echo "  │  3. Right-click the old Codex icon → Remove from Dock              │"
+    echo "  │  Now every Dock launch runs the network check first.               │"
+    echo "  └─────────────────────────────────────────────────────────────────────┘"
+}
+
+create_codex_app_wrapper
+
 # Git pre-push hook — blocks direct pushes to main/master
 GIT_DIR="$(git -C "$SCRIPT_DIR" rev-parse --git-dir 2>/dev/null || true)"
 if [[ -n "$GIT_DIR" ]]; then
@@ -203,5 +277,5 @@ else
     echo "  If you install Codex later, re-run install.sh to add the wrapper."
 fi
 echo ""
-echo "  To remove: delete the claude() / codex() wrapper functions from your shell RC"
-echo "             and rm $BINARY_PATH"
+echo "  To remove: delete the claude() / codex() wrapper functions from your shell RC,"
+echo "             rm $BINARY_PATH, and delete ~/Applications/Verify\\ \\&\\ Launch\\ Codex.app"

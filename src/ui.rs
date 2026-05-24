@@ -14,6 +14,28 @@ pub enum Choice {
     Quit,
 }
 
+/// Plain-text render for non-interactive (GUI wrapper) mode — no ANSI codes.
+/// Writes to stderr. Compact format suited for macOS alert dialog messages.
+pub fn render_plain(results: &[CheckResult]) -> Status {
+    let overall = overall_status(results);
+    for r in results {
+        let icon = match r.status {
+            CheckStatus::Ok => "🟢",
+            CheckStatus::Warn => "🟡",
+            CheckStatus::Fail => "🔴",
+        };
+        let name = format!("{:<14}", r.name);
+        eprintln!("{}  {}  {}", icon, name, r.detail);
+    }
+    eprintln!();
+    match overall {
+        Status::Green => eprintln!("🟢  All checks passed."),
+        Status::Yellow => eprintln!("🟡  Network concerns detected."),
+        Status::Red => eprintln!("🔴  Network issues detected."),
+    }
+    overall
+}
+
 pub fn render(results: &[CheckResult]) -> Status {
     // Determine overall status first so we can show the right summary
     let overall = overall_status(results);

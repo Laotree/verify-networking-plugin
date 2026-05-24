@@ -9,23 +9,45 @@ async fn main() {
         colored::control::set_override(true);
     }
 
-    // First positional argument selects the target tool.
+    let args: Vec<String> = std::env::args().skip(1).collect();
+
+    // --non-interactive: plain-text output, no /dev/tty prompt, structured exit codes.
+    // Used by the Codex desktop app wrapper.
+    let non_interactive = args.iter().any(|a| a == "--non-interactive");
+
+    // First positional arg (non-flag) selects the target tool.
     // Defaults to Claude when invoked without arguments (backward compat).
-    let target: &'static checks::Target = match std::env::args().nth(1).as_deref() {
-        Some("codex") => &checks::CODEX,
-        _ => &checks::CLAUDE,
+    let target: &'static checks::Target = if args.iter().any(|a| a == "codex") {
+        &checks::CODEX
+    } else {
+        &checks::CLAUDE
     };
 
-    eprintln!();
-    eprintln!("  Verifying network before {} starts...", target.tool_name);
-    eprintln!();
+    if !non_interactive {
+        eprintln!();
+        eprintln!("  Verifying network before {} starts...", target.tool_name);
+        eprintln!();
+    }
 
     loop {
-        eprintln!("  Checking...");
-        eprintln!();
-        let results = checks::run_all(target).await;
-        let status = ui::render(&results);
+        if !non_interactive {
+            eprintln!("  Checking...");
+            eprintln!();
+        }
 
+        let results = checks::run_all(target).await;
+
+        if non_interactive {
+            // Plain render, no prompt. Exit codes: 0=green, 2=yellow, 1=red.
+            let status = ui::render_plain(&results);
+            match status {
+                ui::Status::Green => std::process::exit(0),
+                ui::Status::Yellow => std::process::exit(2),
+                ui::Status::Red => std::process::exit(1),
+            }
+        }
+
+        let status = ui::render(&results);
         match status {
             ui::Status::Green => std::process::exit(0),
             _ => match ui::prompt() {
