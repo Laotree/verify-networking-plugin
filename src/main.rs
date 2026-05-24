@@ -9,14 +9,21 @@ async fn main() {
         colored::control::set_override(true);
     }
 
+    // First positional argument selects the target tool.
+    // Defaults to Claude when invoked without arguments (backward compat).
+    let target: &'static checks::Target = match std::env::args().nth(1).as_deref() {
+        Some("codex") => &checks::CODEX,
+        _ => &checks::CLAUDE,
+    };
+
     eprintln!();
-    eprintln!("  Verifying network before Claude starts...");
+    eprintln!("  Verifying network before {} starts...", target.tool_name);
     eprintln!();
 
     loop {
         eprintln!("  Checking...");
         eprintln!();
-        let results = checks::run_all().await;
+        let results = checks::run_all(target).await;
         let status = ui::render(&results);
 
         match status {

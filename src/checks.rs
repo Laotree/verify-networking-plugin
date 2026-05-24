@@ -4,14 +4,34 @@ use serde::Deserialize;
 use tokio::net::TcpStream;
 use tokio::time::timeout;
 
-const TARGET_HOST: &str = "api.anthropic.com";
-const TARGET_ADDR: &str = "api.anthropic.com:443";
 const PROBE_COUNT: usize = 3;
 const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 const LATENCY_WARN_MS: u128 = 500;
 
-// Countries where Claude API access is restricted
+// Countries where API access is restricted
 const BLOCKED_COUNTRIES: &[&str] = &["CN", "HK", "KP", "CU", "IR", "SY", "RU", "BY"];
+
+/// Which CLI tool (and thus which API endpoint) to check.
+pub struct Target {
+    /// Human-readable tool name shown in UI messages.
+    pub tool_name: &'static str,
+    /// Hostname used for DNS resolution and connectivity probes.
+    pub host: &'static str,
+    /// `host:port` string used for TCP probes.
+    pub addr: &'static str,
+}
+
+pub const CLAUDE: Target = Target {
+    tool_name: "Claude",
+    host: "api.anthropic.com",
+    addr: "api.anthropic.com:443",
+};
+
+pub const CODEX: Target = Target {
+    tool_name: "Codex",
+    host: "api.openai.com",
+    addr: "api.openai.com:443",
+};
 
 #[derive(Debug)]
 pub struct CheckResult {
@@ -38,21 +58,21 @@ fn error_result(name: &'static str) -> CheckResult {
     CheckResult { name, status: Status::Fail, detail: "Internal error".to_string() }
 }
 
-pub async fn run_all() -> Vec<CheckResult> {
+pub async fn run_all(target: &'static Target) -> Vec<CheckResult> {
     let (dns_result, ip_result, conn_result) = tokio::join!(
         async {
-            tokio::task::spawn_blocking(check_dns)
+            tokio::task::spawn_blocking(move || check_dns(target))
                 .await
                 .unwrap_or_else(|_| error_result("DNS"))
         },
-        check_ip(),
-        check_connectivity(),
+        check_ip(target),
+        check_connectivity(target),
     );
     vec![dns_result, ip_result, conn_result]
 }
 
-fn check_dns() -> CheckResult {
-    match format!("{}:443", TARGET_HOST).to_socket_addrs() {
+fn check_dns(target: &Target) -> CheckResult {
+    match format!("{}:443", target.host).to_socket_addrs() {
         Ok(mut addrs) => {
             let ip = addrs
                 .next()
@@ -61,18 +81,18 @@ fn check_dns() -> CheckResult {
             CheckResult {
                 name: "DNS",
                 status: Status::Ok,
-                detail: format!("{} → {}", TARGET_HOST, ip),
+                detail: format!("{} → {}", target.host, ip),
             }
         }
         Err(e) => CheckResult {
             name: "DNS",
             status: Status::Fail,
-            detail: format!("Cannot resolve {}: {}", TARGET_HOST, e),
+            detail: format!("Cannot resolve {}: {}", target.host, e),
         },
     }
 }
 
-async fn check_ip() -> CheckResult {
+async fn check_ip(target: &Target) -> CheckResult {
     let client = match reqwest::Client::builder().timeout(Duration::from_secs(8)).build() {
         Ok(c) => c,
         Err(e) => {
@@ -94,8 +114,8 @@ async fn check_ip() -> CheckResult {
                         name: "Exit IP",
                         status: Status::Fail,
                         detail: format!(
-                            "{} [{}] {} — Claude unavailable in this region",
-                            info.ip, country, org
+                            "{} [{}] {} — {} unavailable in this region",
+                            info.ip, country, org, target.tool_name
                         ),
                     }
                 } else {
@@ -120,12 +140,15 @@ async fn check_ip() -> CheckResult {
     }
 }
 
-async fn check_connectivity() -> CheckResult {
+async fn check_connectivity(target: &Target) -> CheckResult {
+    let addr = target.addr;
+    let host = target.host;
+
     let tasks: Vec<_> = (0..PROBE_COUNT)
         .map(|_| {
             tokio::spawn(async move {
                 let start = Instant::now();
-                let ok = timeout(PROBE_TIMEOUT, TcpStream::connect(TARGET_ADDR))
+                let ok = timeout(PROBE_TIMEOUT, TcpStream::connect(addr))
                     .await
                     .is_ok_and(|r| r.is_ok());
                 (ok, start.elapsed().as_millis())
@@ -147,7 +170,7 @@ async fn check_connectivity() -> CheckResult {
         return CheckResult {
             name: "Connectivity",
             status: Status::Fail,
-            detail: format!("Cannot reach {} (100% loss)", TARGET_HOST),
+            detail: format!("Cannot reach {} (100% loss)", host),
         };
     }
 
@@ -163,6 +186,6 @@ async fn check_connectivity() -> CheckResult {
     CheckResult {
         name: "Connectivity",
         status,
-        detail: format!("{} avg {}ms  loss {}%", TARGET_HOST, avg_ms, loss_pct),
+        detail: format!("{} avg {}ms  loss {}%", host, avg_ms, loss_pct),
     }
 }
