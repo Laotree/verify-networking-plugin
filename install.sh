@@ -44,30 +44,58 @@ if len(cleaned) != len(ups):
 PYEOF
 fi
 
-# Shell wrapper function — intercepts 'claude' before the process starts
-MARKER="# verify-networking-plugin"
-read -r -d '' SNIPPET <<'EOF' || true
+# ---------------------------------------------------------------------------
+# Shell wrapper snippets
+# ---------------------------------------------------------------------------
+
+# Claude wrapper — passes 'claude' so the binary targets api.anthropic.com
+CLAUDE_MARKER="# verify-networking-plugin"
+read -r -d '' CLAUDE_SNIPPET <<'EOF' || true
 # verify-networking-plugin
 claude() {
     local checker="$HOME/.claude/plugins/verify-networking"
-    [[ -x "$checker" ]] && { "$checker" || return 1; }
+    [[ -x "$checker" ]] && { "$checker" claude || return 1; }
     command claude "$@"
 }
 EOF
 
-add_to_rc() {
+# Codex wrapper — passes 'codex' so the binary targets api.openai.com
+CODEX_MARKER="# verify-networking-plugin-codex"
+read -r -d '' CODEX_SNIPPET <<'EOF' || true
+# verify-networking-plugin-codex
+codex() {
+    local checker="$HOME/.claude/plugins/verify-networking"
+    [[ -x "$checker" ]] && { "$checker" codex || return 1; }
+    command codex "$@"
+}
+EOF
+
+# ---------------------------------------------------------------------------
+# Helper: add a snippet to an RC file if its marker is absent
+# ---------------------------------------------------------------------------
+add_snippet_to_rc() {
     local rc="$1"
-    if grep -qF "$MARKER" "$rc" 2>/dev/null; then
-        echo "→ Shell wrapper already present in $rc"
+    local marker="$2"
+    local snippet="$3"
+    local label="$4"
+    if grep -qF "$marker" "$rc" 2>/dev/null; then
+        echo "→ ${label} wrapper already present in $rc"
     else
-        printf '\n%s\n' "$SNIPPET" >> "$rc"
-        echo "→ Added claude() wrapper to $rc"
+        printf '\n%s\n' "$snippet" >> "$rc"
+        echo "→ Added ${label}() wrapper to $rc"
         echo "  Run: source $rc"
     fi
 }
 
+add_to_rc() {
+    local rc="$1"
+    add_snippet_to_rc "$rc" "$CLAUDE_MARKER" "$CLAUDE_SNIPPET" "claude"
+}
+
+# ---------------------------------------------------------------------------
 # Wrap aliases whose RHS invokes 'claude' (e.g. alias a1m='aivo claude ...')
 # Replaces the alias with a shell function that runs the checker first.
+# ---------------------------------------------------------------------------
 patch_claude_aliases() {
     local rc="$1"
     [[ -f "$rc" ]] || return 0
@@ -100,7 +128,7 @@ ${fn_marker}
 unalias ${alias_name} 2>/dev/null || true
 ${alias_name}() {
     local checker="\$HOME/.claude/plugins/verify-networking"
-    [[ -x "\$checker" ]] && { "\$checker" || return 1; }
+    [[ -x "\$checker" ]] && { "\$checker" claude || return 1; }
     ${alias_cmd} "\$@"
 }
 FNSNIPPET
@@ -109,20 +137,52 @@ FNSNIPPET
     done <<< "$aliases"
 }
 
+# ---------------------------------------------------------------------------
+# Add codex wrapper to an RC file (only if `codex` is available on PATH)
+# ---------------------------------------------------------------------------
+add_codex_to_rc() {
+    local rc="$1"
+    if command -v codex &>/dev/null; then
+        add_snippet_to_rc "$rc" "$CODEX_MARKER" "$CODEX_SNIPPET" "codex"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Apply wrappers to detected RC files
+# ---------------------------------------------------------------------------
 added=false
-[[ "$SHELL" == *zsh*  && -f "$HOME/.zshrc"  ]] && { add_to_rc "$HOME/.zshrc";  patch_claude_aliases "$HOME/.zshrc";  added=true; }
-[[ "$SHELL" == *bash* && -f "$HOME/.bashrc" ]] && { add_to_rc "$HOME/.bashrc"; patch_claude_aliases "$HOME/.bashrc"; added=true; }
-[[ "$SHELL" == *bash* && -f "$HOME/.bash_profile" && "$added" == false ]] && { add_to_rc "$HOME/.bash_profile"; patch_claude_aliases "$HOME/.bash_profile"; }
+if [[ "$SHELL" == *zsh* && -f "$HOME/.zshrc" ]]; then
+    add_to_rc "$HOME/.zshrc"
+    patch_claude_aliases "$HOME/.zshrc"
+    add_codex_to_rc "$HOME/.zshrc"
+    added=true
+fi
+if [[ "$SHELL" == *bash* && -f "$HOME/.bashrc" ]]; then
+    add_to_rc "$HOME/.bashrc"
+    patch_claude_aliases "$HOME/.bashrc"
+    add_codex_to_rc "$HOME/.bashrc"
+    added=true
+fi
+if [[ "$SHELL" == *bash* && -f "$HOME/.bash_profile" && "$added" == false ]]; then
+    add_to_rc "$HOME/.bash_profile"
+    patch_claude_aliases "$HOME/.bash_profile"
+    add_codex_to_rc "$HOME/.bash_profile"
+fi
 if [[ -f "$HOME/.profile" ]]; then
     [[ "$added" == false ]] && { add_to_rc "$HOME/.profile"; added=true; }
     patch_claude_aliases "$HOME/.profile"
+    add_codex_to_rc "$HOME/.profile"
 fi
 
 if [[ "$added" == false ]]; then
     echo ""
     echo "→ Could not detect shell RC. Add this to your shell config manually:"
     echo ""
-    echo "$SNIPPET"
+    echo "$CLAUDE_SNIPPET"
+    if command -v codex &>/dev/null; then
+        echo ""
+        echo "$CODEX_SNIPPET"
+    fi
 fi
 
 # Git pre-push hook — blocks direct pushes to main/master
@@ -135,7 +195,13 @@ else
 fi
 
 echo ""
-echo "✓ Done. Network check runs before every Claude session (claude + detected alias wrappers)."
+if command -v codex &>/dev/null; then
+    echo "✓ Done. Network check runs before every Claude and Codex session."
+else
+    echo "✓ Done. Network check runs before every Claude session (claude + detected alias wrappers)."
+    echo "  Codex CLI not found on PATH — codex() wrapper skipped."
+    echo "  If you install Codex later, re-run install.sh to add the wrapper."
+fi
 echo ""
-echo "  To remove: delete the claude() function and any alias wrapper functions from your shell RC"
+echo "  To remove: delete the claude() / codex() wrapper functions from your shell RC"
 echo "             and rm $BINARY_PATH"
