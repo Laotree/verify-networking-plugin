@@ -82,7 +82,7 @@ Type `claude` as usual. The check runs automatically before every session.
   Checking...
 
   🟢 DNS            api.anthropic.com → 18.165.56.1
-  🟡 Exit IP        1.2.3.4[US] AS12345 Example ISP
+  🟡 Exit IP        1.2.3.4 [US] AS12345 Example ISP
   🟡 Connectivity   api.anthropic.com avg 612ms  loss 0%
 
   🟡 Network concerns detected.
@@ -111,7 +111,12 @@ Type `claude` as usual. The check runs automatically before every session.
 ```bash
 make          # debug build
 make release  # release build
+make test     # run tests
+make lint     # clippy
+make fmt      # format source
+make clean    # remove build artifacts
 make install  # build + install + patch shell RC
+make hooks    # install git pre-push hook
 ```
 
 ## Removal
