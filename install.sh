@@ -7,6 +7,46 @@ INSTALL_DIR="$HOME/.claude/plugins"
 SETTINGS="$HOME/.claude/settings.json"
 BINARY_PATH="$INSTALL_DIR/$BINARY"
 
+# ---------------------------------------------------------------------------
+# Cargo version guard — Cargo.lock v4 requires Cargo ≥ 1.78.0
+# ---------------------------------------------------------------------------
+MIN_CARGO="1.78.0"
+
+check_cargo_version() {
+    if ! command -v cargo &>/dev/null; then
+        echo ""
+        echo "✗ cargo not found. Install Rust first:"
+        echo ""
+        echo "    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+        echo ""
+        exit 1
+    fi
+
+    local cargo_ver
+    cargo_ver=$(cargo --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+
+    # Use sort -V to compare: if MIN_CARGO > cargo_ver, sort -V -C will fail
+    # because the two lines would not be in non-descending order.
+    if ! printf '%s\n%s\n' "$MIN_CARGO" "$cargo_ver" | sort -V -C 2>/dev/null; then
+        echo ""
+        echo "✗ Cargo $cargo_ver is too old (need ≥ $MIN_CARGO)."
+        echo "  The project's Cargo.lock uses format v4, which your Cargo cannot read."
+        echo ""
+        echo "  Fix — update your Rust toolchain:"
+        echo ""
+        echo "    rustup update stable       # if you installed via rustup (recommended)"
+        echo "    brew upgrade rust          # if you installed via Homebrew"
+        echo ""
+        echo "  Then re-run: ./install.sh"
+        echo ""
+        exit 1
+    fi
+
+    echo "→ Cargo $cargo_ver  ✓"
+}
+
+check_cargo_version
+
 echo "→ Building $BINARY (release)..."
 cargo build --release --manifest-path "$SCRIPT_DIR/Cargo.toml"
 
