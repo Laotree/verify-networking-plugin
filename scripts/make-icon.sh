@@ -9,12 +9,14 @@
 
 set -euo pipefail
 
-OUTPUT="${1:?Usage: make-icon.sh <output.icns> [Codex.app path]}"
-CODEX_APP="${2:-/Applications/Codex.app}"
-CODEX_ICNS="$CODEX_APP/Contents/Resources/icon.icns"
+OUTPUT="${1:?Usage: make-icon.sh <output.icns> <source.app>}"
+SOURCE_APP="${2:?Usage: make-icon.sh <output.icns> <source.app>}"
 
-if [[ ! -f "$CODEX_ICNS" ]]; then
-    echo "✗ Cannot find Codex icon at $CODEX_ICNS" >&2
+# Find the first .icns in the app's Resources directory
+SOURCE_ICNS=$(find "$SOURCE_APP/Contents/Resources" -maxdepth 1 -name "*.icns" | head -1)
+
+if [[ -z "$SOURCE_ICNS" ]]; then
+    echo "✗ Cannot find any .icns in $SOURCE_APP/Contents/Resources" >&2
     exit 1
 fi
 
@@ -22,9 +24,9 @@ WORK=$(mktemp -d)
 trap "rm -rf '$WORK'" EXIT
 
 # ---------------------------------------------------------------------------
-# 1. Extract 512×512 base PNG from Codex.app icon
+# 1. Extract 512×512 base PNG from source app icon
 # ---------------------------------------------------------------------------
-sips -s format png -z 512 512 "$CODEX_ICNS" --out "$WORK/base.png" >/dev/null
+sips -s format png -z 512 512 "$SOURCE_ICNS" --out "$WORK/base.png" >/dev/null
 
 # ---------------------------------------------------------------------------
 # 2. Render shield badge (180×180 canvas, dark-blue circle + shield + ✓)

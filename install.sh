@@ -293,19 +293,7 @@ PLIST
     # App icon — Codex logo + shield badge (requires ImageMagick 7 / magick)
     local icon_script="$SCRIPT_DIR/scripts/make-icon.sh"
     local icon_out="$resources_dir/AppIcon.icns"
-    if command -v magick &>/dev/null && [[ -x "$icon_script" ]]; then
-        "$icon_script" "$icon_out" "$codex_app" \
-            && echo "→ App icon generated (Codex logo + shield badge)" \
-            || {
-                echo "→ Icon generation failed — falling back to plain Codex icon"
-                cp "$codex_app/Contents/Resources/icon.icns" "$icon_out" 2>/dev/null || true
-            }
-    else
-        # No ImageMagick: copy Codex icon as-is
-        cp "$codex_app/Contents/Resources/icon.icns" "$icon_out" 2>/dev/null \
-            && echo "→ Copied Codex icon (install ImageMagick for the shield-badge variant)" \
-            || echo "→ Could not copy Codex icon — app will use default macOS icon"
-    fi
+    _install_badged_icon "$icon_script" "$icon_out" "$codex_app" "Codex"
 
     # Tell macOS to refresh the icon cache for the new bundle
     touch "$bundle_root" 2>/dev/null || true
@@ -321,7 +309,110 @@ PLIST
     echo "  └─────────────────────────────────────────────────────────────────────┘"
 }
 
+# ---------------------------------------------------------------------------
+# Claude Desktop App wrapper (.app bundle)
+# ---------------------------------------------------------------------------
+create_claude_app_wrapper() {
+    local claude_app=""
+    for candidate in \
+        "/Applications/Claude.app" \
+        "$HOME/Applications/Claude.app"
+    do
+        if [[ -d "$candidate" ]]; then
+            claude_app="$candidate"
+            break
+        fi
+    done
+
+    if [[ -z "$claude_app" ]]; then
+        echo "→ Claude desktop app not found — skipping .app wrapper"
+        return 0
+    fi
+
+    echo "→ Claude desktop app found at $claude_app"
+
+    local bundle_root="$HOME/Applications/Verify & Launch Claude.app"
+    local wrapper_dir="$bundle_root/Contents/MacOS"
+    local plist_dir="$bundle_root/Contents"
+    local resources_dir="$bundle_root/Contents/Resources"
+    mkdir -p "$wrapper_dir" "$resources_dir"
+
+    # Info.plist
+    cat > "$plist_dir/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>Verify &amp; Launch Claude</string>
+    <key>CFBundleDisplayName</key>
+    <string>Verify &amp; Launch Claude</string>
+    <key>CFBundleExecutable</key>
+    <string>launcher</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.verify-networking.claude-launcher</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleVersion</key>
+    <string>1.0</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>10.15</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+</dict>
+</plist>
+PLIST
+
+    # Launcher script
+    cp "$SCRIPT_DIR/scripts/claude-launcher.sh" "$wrapper_dir/launcher"
+    chmod +x "$wrapper_dir/launcher"
+
+    # App icon — Claude logo + shield badge
+    local icon_script="$SCRIPT_DIR/scripts/make-icon.sh"
+    local icon_out="$resources_dir/AppIcon.icns"
+    _install_badged_icon "$icon_script" "$icon_out" "$claude_app" "Claude"
+
+    # Nudge macOS icon cache
+    touch "$bundle_root" 2>/dev/null || true
+
+    echo "→ Created ~/Applications/Verify & Launch Claude.app"
+    echo ""
+    echo "  ┌─────────────────────────────────────────────────────────────────────┐"
+    echo "  │  One-time Dock setup:                                               │"
+    echo "  │  1. Open Finder → Go → Applications (or ~/Applications)            │"
+    echo "  │  2. Drag 'Verify & Launch Claude' to your Dock                     │"
+    echo "  │  3. Right-click the old Claude icon → Remove from Dock             │"
+    echo "  │  Now every Dock launch runs the network check first.               │"
+    echo "  └─────────────────────────────────────────────────────────────────────┘"
+}
+
+# ---------------------------------------------------------------------------
+# Shared helper: generate badged icon or fall back to plain copy
+# Usage: _install_badged_icon <make-icon.sh> <output.icns> <source.app> <label>
+# ---------------------------------------------------------------------------
+_install_badged_icon() {
+    local icon_script="$1" icon_out="$2" source_app="$3" label="$4"
+    if command -v magick &>/dev/null && [[ -x "$icon_script" ]]; then
+        "$icon_script" "$icon_out" "$source_app" \
+            && echo "→ App icon generated ($label logo + shield badge)" \
+            || {
+                echo "→ Icon generation failed — falling back to plain $label icon"
+                find "$source_app/Contents/Resources" -maxdepth 1 -name "*.icns" \
+                    | head -1 | xargs -I{} cp {} "$icon_out" 2>/dev/null || true
+            }
+    else
+        find "$source_app/Contents/Resources" -maxdepth 1 -name "*.icns" \
+            | head -1 | xargs -I{} cp {} "$icon_out" 2>/dev/null \
+            && echo "→ Copied $label icon (install ImageMagick for the shield-badge variant)" \
+            || echo "→ Could not copy $label icon — app will use default macOS icon"
+    fi
+}
+
 create_codex_app_wrapper
+create_claude_app_wrapper
 
 # Git pre-push hook — blocks direct pushes to main/master
 GIT_DIR="$(git -C "$SCRIPT_DIR" rev-parse --git-dir 2>/dev/null || true)"
@@ -333,13 +424,11 @@ else
 fi
 
 echo ""
-if command -v codex &>/dev/null; then
-    echo "✓ Done. Network check runs before every Claude and Codex session."
-else
-    echo "✓ Done. Network check runs before every Claude session (claude + detected alias wrappers)."
-    echo "  Codex CLI not found on PATH — codex() wrapper skipped."
-    echo "  If you install Codex later, re-run install.sh to add the wrapper."
-fi
+echo "✓ Done. Network check runs before every Claude and Codex session"
+echo "  (CLI wrappers + detected alias wrappers + desktop app wrappers)."
 echo ""
-echo "  To remove: delete the claude() / codex() wrapper functions from your shell RC,"
-echo "             rm $BINARY_PATH, and delete ~/Applications/Verify\\ \\&\\ Launch\\ Codex.app"
+echo "  To remove:"
+echo "    • Delete the claude() / codex() functions from your shell RC"
+echo "    • rm $BINARY_PATH"
+echo "    • Delete ~/Applications/Verify\\ \\&\\ Launch\\ Claude.app"
+echo "    • Delete ~/Applications/Verify\\ \\&\\ Launch\\ Codex.app"
