@@ -17,22 +17,31 @@ To test the binary directly:
 
 ## Architecture
 
-The plugin is a Rust binary installed at `~/.claude/plugins/verify-networking`. `install.sh` adds a `claude()` shell function to the user's RC file that intercepts every `claude` invocation before the process starts:
+The plugin is a Rust binary installed at `~/.claude/plugins/verify-networking`. `install.sh` adds shell wrapper functions to the user's RC file that intercept every `claude` (and `codex`, if installed) invocation before the process starts:
 
 ```bash
 claude() {
     local checker="$HOME/.claude/plugins/verify-networking"
-    [[ -x "$checker" ]] && { "$checker" || return 1; }
+    [[ -x "$checker" ]] && { "$checker" claude || return 1; }
     command claude "$@"
+}
+
+codex() {
+    local checker="$HOME/.claude/plugins/verify-networking"
+    [[ -x "$checker" ]] && { "$checker" codex || return 1; }
+    command codex "$@"
 }
 ```
 
-This ensures the network check runs before Claude Code makes any outbound requests.
+The tool name (`claude` / `codex`) is passed as the first argument so the binary knows which API endpoint to probe. This ensures the network check runs before either tool makes any outbound requests.
 
-**Checks** (`src/checks.rs`): All three run concurrently via `tokio::join!`.
-- DNS: synchronous `ToSocketAddrs` in `spawn_blocking`, resolves `api.anthropic.com`
-- Exit IP: async HTTP GET to `ipinfo.io/json`, checks `country` against a hardcoded blocked-countries list (CN/HK/KP/CU/IR/SY/RU/BY)
-- Connectivity: 3 concurrent TCP probes to `api.anthropic.com:443` with 5s timeout each; reports avg latency and loss %
+**Checks** (`src/checks.rs`): All three run concurrently via `tokio::join!`. Targets differ by tool:
+
+| Check | Claude target | Codex target |
+|-------|--------------|--------------|
+| DNS | `api.anthropic.com` | `api.openai.com` |
+| Exit IP | `ipinfo.io/json` — blocks CN/HK/KP/CU/IR/SY/RU/BY | same |
+| Connectivity | 3 × TCP to `api.anthropic.com:443`, 5 s timeout | 3 × TCP to `api.openai.com:443`, 5 s timeout |
 
 **Status thresholds**: Fail = DNS error / blocked country / 100% TCP loss. Warn = partial TCP loss or avg latency >500ms. Overall: Red if any Fail, Yellow if any Warn, Green if all Ok.
 
