@@ -104,7 +104,7 @@ jobs:
           cat > homebrew-tap/Formula/${{ env.BINARY }}.rb <<- FORMULA
           class VerifyNetworking < Formula
             desc "Network connectivity checker that runs before Claude Code/Codex sessions"
-            homepage "https://github.com/raypar/verify-networking-plugin"
+            homepage "https://github.com/Laotree/verify-networking-plugin"
             url "https://github.com/Laotree/verify-networking-plugin/releases/download/v${VERSION}/verify-networking-${VERSION}-macos.tar.gz"
             sha256 "${SHA256}"
             version "${VERSION}"
