@@ -6,14 +6,13 @@ on:
 
 env:
   BINARY: verify-networking
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
   verify:
     name: Verify tag matches Cargo.toml
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6.0.2
       - run: |
           TAG_VER="${GITHUB_REF_NAME#v}"
           CARGO_VER="$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')"
@@ -32,7 +31,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       sha256: ${{ steps.archive.outputs.sha256 }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6.0.2
       - name: Setup Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
       - name: Extract version from tag
@@ -48,7 +47,7 @@ jobs:
           tar czf "${ARCHIVE}" -C target/release "${{ env.BINARY }}"
           echo "sha256=$(shasum -a 256 "${ARCHIVE}" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
       - name: Upload archive
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: release-archive
           path: ${{ env.BINARY }}-*.tar.gz
@@ -60,12 +59,12 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v6.0.2
+      - uses: actions/download-artifact@v8.0.1
         with:
           name: release-archive
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3.0.0
         with:
           files: ${{ env.BINARY }}-*.tar.gz
           generate_release_notes: true
@@ -75,7 +74,7 @@ jobs:
     needs: build
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6.0.2
       - name: Setup Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
       - name: cargo publish
@@ -100,7 +99,7 @@ jobs:
     steps:
       - name: Checkout homebrew-tap
         id: checkout-tap
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
         with:
           repository: Laotree/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
