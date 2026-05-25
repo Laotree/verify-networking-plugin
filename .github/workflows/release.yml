@@ -1,0 +1,133 @@
+name: Release
+
+on:
+  push:
+    tags: [ 'v*' ]
+
+env:
+  BINARY: verify-networking
+
+jobs:
+  verify:
+    name: Verify tag matches Cargo.toml
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          TAG_VER="${GITHUB_REF_NAME#v}"
+          CARGO_VER="$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')"
+          if [[ "$TAG_VER" != "$CARGO_VER" ]]; then
+            echo "::error::Tag version ($TAG_VER) does not match Cargo.toml version ($CARGO_VER)"
+            echo "::error::Update Cargo.toml to $TAG_VER, commit, and re-tag."
+            exit 1
+          fi
+          echo "✓ Tag $GITHUB_REF_NAME matches Cargo.toml $CARGO_VER"
+
+  build:
+    name: Build release binary
+    needs: verify
+    runs-on: macos-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      sha256: ${{ steps.archive.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: Build release
+        run: cargo build --release
+      - name: Archive binary
+        id: archive
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          ARCHIVE="${{ env.BINARY }}-${VERSION}-macos.tar.gz"
+          tar czf "${ARCHIVE}" -C target/release "${{ env.BINARY }}"
+          echo "sha256=$(shasum -a 256 "${ARCHIVE}" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-archive
+          path: ${{ env.BINARY }}-*.tar.gz
+
+  github-release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-archive
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.BINARY }}-*.tar.gz
+          generate_release_notes: true
+
+  publish-cratesio:
+    name: Publish to crates.io
+    needs: build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish
+
+  update-homebrew:
+    name: Update Homebrew tap formula
+    needs: build
+    runs-on: macos-latest
+    steps:
+      - name: Checkout homebrew-tap
+        id: checkout-tap
+        uses: actions/checkout@v4
+        with:
+          repository: Laotree/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+        continue-on-error: true
+      - name: Generate formula
+        if: steps.checkout-tap.outcome == 'success'
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          SHA256: ${{ needs.build.outputs.sha256 }}
+        run: |
+          cat > homebrew-tap/Formula/${{ env.BINARY }}.rb <<- FORMULA
+          class VerifyNetworking < Formula
+            desc "Network connectivity checker that runs before Claude Code/Codex sessions"
+            homepage "https://github.com/Laotree/verify-networking-plugin"
+            url "https://github.com/Laotree/verify-networking-plugin/releases/download/v${VERSION}/verify-networking-${VERSION}-macos.tar.gz"
+            sha256 "${SHA256}"
+            version "${VERSION}"
+
+            def install
+              bin.install "verify-networking"
+            end
+
+            test do
+              assert_predicate bin/"verify-networking", :exist?
+            end
+          end
+          FORMULA
+      - name: Commit and push
+        if: steps.checkout-tap.outcome == 'success'
+        run: |
+          cd homebrew-tap
+          if git diff --quiet; then
+            echo "No changes — formula up to date"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/
+          git commit -m "verify-networking: update to v${{ needs.build.outputs.version }}"
+          git push
