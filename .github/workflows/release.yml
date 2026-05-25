@@ -6,6 +6,7 @@ on:
 
 env:
   BINARY: verify-networking
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
   verify:
@@ -80,7 +81,15 @@ jobs:
       - name: cargo publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish
+        run: |
+          output=$(cargo publish 2>&1)
+          status=$?
+          echo "$output"
+          if echo "$output" | grep -q "already exists"; then
+            echo "✓ Version already published to crates.io — skipping."
+            exit 0
+          fi
+          exit $status
 
   update-homebrew:
     name: Update Homebrew tap formula
@@ -123,12 +132,12 @@ jobs:
         if: steps.checkout-tap.outcome == 'success'
         run: |
           cd homebrew-tap
-          if git diff --quiet; then
+          git add Formula/
+          if git diff --cached --quiet; then
             echo "No changes — formula up to date"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Formula/
           git commit -m "verify-networking: update to v${{ needs.build.outputs.version }}"
-          git push
+          git push origin HEAD:main
