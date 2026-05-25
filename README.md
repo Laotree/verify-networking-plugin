@@ -40,6 +40,23 @@ Before either tool starts, three checks run concurrently:
 
 ## Installation
 
+### Homebrew
+
+```bash
+brew install Laotree/tap/verify-networking
+```
+
+Then add the shell wrappers to your RC file (see [Manual](#manual) below).
+
+### cargo install
+
+```bash
+cargo install verify-networking
+cp "$(which verify-networking)" ~/.claude/plugins/
+```
+
+Then add the shell wrappers to your RC file (see [Manual](#manual) below).
+
 ### From source
 
 ```bash
@@ -49,7 +66,7 @@ cd verify-networking-plugin
 source ~/.zshrc   # or ~/.bashrc
 ```
 
-`install.sh` automatically detects whether `codex` is on your `$PATH` and adds its wrapper alongside the `claude` wrapper. If you install Codex later, re-run `./install.sh`.
+`install.sh` automatically detects whether `codex` is on your `$PATH` and adds its wrapper alongside the `claude` wrapper. It also creates **`Verify & Launch Claude.app`** (and `Verify & Launch Codex.app` if Codex is installed) in `~/Applications` — drag either to the Dock for one-click launch with a network pre-flight check. If you install Codex later, re-run `./install.sh`.
 
 ### Manual
 
