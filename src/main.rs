@@ -1,6 +1,7 @@
 use std::io::IsTerminal;
 
 mod checks;
+mod trace;
 mod ui;
 
 #[tokio::main]
@@ -50,14 +51,19 @@ async fn main() {
         let status = ui::render(&results);
         match status {
             ui::Status::Green => std::process::exit(0),
-            _ => match ui::prompt() {
-                ui::Choice::Continue => std::process::exit(0),
-                ui::Choice::Retry => eprintln!(),
-                ui::Choice::Quit => {
-                    eprintln!("  Aborted.");
-                    std::process::exit(1);
+            _ => {
+                if let Some((tool, output)) = trace::run_trace(target.host).await {
+                    ui::print_trace(tool, target.host, &output);
                 }
-            },
+                match ui::prompt() {
+                    ui::Choice::Continue => std::process::exit(0),
+                    ui::Choice::Retry => eprintln!(),
+                    ui::Choice::Quit => {
+                        eprintln!("  Aborted.");
+                        std::process::exit(1);
+                    }
+                }
+            }
         }
     }
 }

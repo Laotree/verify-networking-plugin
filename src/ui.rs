@@ -69,6 +69,15 @@ pub fn render(results: &[CheckResult]) -> Status {
     overall
 }
 
+pub fn print_trace(tool: &str, host: &str, output: &str) {
+    let header = format!("  Route to {} (via {})", host, tool);
+    eprintln!("{}", header.dimmed());
+    for line in output.lines() {
+        eprintln!("  {}", line);
+    }
+    eprintln!();
+}
+
 pub fn prompt() -> Choice {
     eprint!("  [C]ontinue  [R]etry  [Q]uit › ");
     io::stderr().flush().ok();
