@@ -45,7 +45,9 @@ The tool name (`claude` / `codex`) is passed as the first argument so the binary
 
 **Status thresholds**: Fail = DNS error / blocked country / 100% TCP loss. Warn = partial TCP loss or avg latency >500ms. Overall: Red if any Fail, Yellow if any Warn, Green if all Ok.
 
-**UI** (`src/ui.rs`): All output goes to stderr. Interactive prompts (`[C]ontinue [R]etry [Q]uit`) read from `/dev/tty` so they work even when stdin is redirected.
+**Trace** (`src/trace.rs`): On any non-green result, runs `mtr --report --no-dns -c 3` (preferred) or `traceroute -n` toward the API host. If [nali](https://github.com/zu1k/nali) is on `$PATH`, output is piped through it to annotate each hop IP with geolocation data; the trace header then reads `mtr + nali` or `traceroute + nali`. Falls back silently to plain output if nali is absent or times out (5 s guard). After printing the hops, if the exit IP from the `ipinfo.io` check is absent from the trace output, a warning is shown — this indicates the route to the API host differs from the route ipinfo.io observed (common with transparent proxies or split-tunnel VPNs).
+
+**UI** (`src/ui.rs`): All output goes to stderr. While the trace runs, an animated braille spinner is shown so the user knows a slow probe (up to 30 s) is in progress; the spinner line is cleared before the hop list prints. Interactive prompts (`[C]ontinue [R]etry [Q]uit`) read from `/dev/tty` so they work even when stdin is redirected.
 
 **Exit codes**: 0 = proceed (shell function runs `command claude "$@"`), 1 = abort (user quit, shell function returns 1).
 

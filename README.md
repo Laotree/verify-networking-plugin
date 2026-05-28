@@ -48,6 +48,18 @@ brew install Laotree/tap/verify-networking
 
 Then add the shell wrappers to your RC file (see [Manual](#manual) below).
 
+### Optional: richer trace output with nali
+
+When a network issue is detected, the tool runs `mtr` or `traceroute` and annotates each hop IP with geolocation data if [nali](https://github.com/zu1k/nali) is on your `$PATH`. No configuration required — it is detected automatically at runtime.
+
+```bash
+brew install nali          # macOS
+# or
+cargo install nali         # cross-platform
+```
+
+Without nali the trace still runs; IPs are just shown as raw addresses.
+
 ### cargo install
 
 ```bash
@@ -141,7 +153,7 @@ Type `claude` or `codex` as usual. The check runs automatically before every ses
   [C]ontinue  [R]etry  [Q]uit ›
 ```
 
-**Hard failure (red) — blocked region:**
+**Hard failure (red) — blocked region (with nali installed):**
 
 ```
   Verifying network before Claude starts...
@@ -149,13 +161,27 @@ Type `claude` or `codex` as usual. The check runs automatically before every ses
   Checking...
 
   🟢 DNS            api.anthropic.com → 18.165.56.1
-  🔴 Exit IP        1.2.3.4 [CN] AS12345 Example ISP — Claude unavailable in this region
+  🔴 Exit IP        1.2.3.4 [HK] AS9304 Example ISP — Claude unavailable in this region
   🟢 Connectivity   api.anthropic.com avg 201ms  loss 0%
 
   🔴 Network issues detected.
 
+  Running traceroute for a more precise path analysis — this may take ~30 s  ⠸
+
+  Route to api.anthropic.com (via traceroute + nali)
+   1  192.168.1.1 [局域网 IP]   2 ms  2 ms  2 ms
+   2  10.0.0.1 [局域网 IP]   8 ms  9 ms  8 ms
+   3  203.0.113.1 [香港 Example Carrier]   15 ms  14 ms  15 ms
+   4  89.149.128.174 [欧美地区 GTT通讯公司骨干网]   183 ms  182 ms  183 ms
+   5  141.101.72.19 [美国加利福尼亚州洛杉矶 CloudFlare节点]   210 ms  213 ms  211 ms
+   6  18.165.56.1 [美国]   200 ms  201 ms  200 ms
+
+  Note: exit IP 1.2.3.4 not seen in trace hops — the route to this host may differ from the route ipinfo.io observed.
+
   [C]ontinue  [R]etry  [Q]uit ›
 ```
+
+Without nali the trace shows the same hops but with bare IPs and no geolocation annotations, and the header reads `(via traceroute)` instead of `(via traceroute + nali)`.
 
 ## Build
 
