@@ -65,7 +65,7 @@ async fn main() {
                 .await;
 
                 if let Some((tool, output)) = trace {
-                    ui::print_trace(tool, target.host, &output);
+                    ui::print_trace(&tool, target.host, &output);
                     if let Some(ref ip) = exit_ip {
                         ui::print_exit_ip_warning(ip, &output);
                     }
