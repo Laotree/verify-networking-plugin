@@ -1,6 +1,7 @@
 use crate::checks::{CheckResult, Status as CheckStatus};
 use colored::Colorize;
 use std::io::{self, BufRead, Write};
+use tokio::time::{interval, Duration};
 
 pub enum Status {
     Green,
@@ -76,6 +77,49 @@ pub fn print_trace(tool: &str, host: &str, output: &str) {
         eprintln!("  {}", line);
     }
     eprintln!();
+}
+
+pub async fn run_with_spinner<T, Fut>(msg: &str, fut: Fut) -> T
+where
+    Fut: std::future::Future<Output = T>,
+{
+    const FRAMES: [char; 10] = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+    let msg = msg.to_string();
+    let msg_len = msg.len();
+
+    let handle = tokio::spawn(async move {
+        let mut ticker = interval(Duration::from_millis(80));
+        let mut i = 0usize;
+        loop {
+            ticker.tick().await;
+            eprint!("\r  {}  {}", msg, FRAMES[i % FRAMES.len()]);
+            io::stderr().flush().ok();
+            i += 1;
+        }
+    });
+
+    let result = fut.await;
+    handle.abort();
+
+    let clear = " ".repeat(msg_len + 6);
+    eprint!("\r{}\r", clear);
+    io::stderr().flush().ok();
+
+    result
+}
+
+pub fn print_exit_ip_warning(exit_ip: &str, trace_output: &str) {
+    if !trace_output.contains(exit_ip) {
+        eprintln!(
+            "  {}",
+            format!(
+                "Note: exit IP {} not seen in trace hops — the route to this host may differ from the route ipinfo.io observed.",
+                exit_ip
+            )
+            .yellow()
+        );
+        eprintln!();
+    }
 }
 
 pub fn prompt() -> Choice {

@@ -52,8 +52,23 @@ async fn main() {
         match status {
             ui::Status::Green => std::process::exit(0),
             _ => {
-                if let Some((tool, output)) = trace::run_trace(target.host).await {
+                let exit_ip = results
+                    .iter()
+                    .find(|r| r.name == "Exit IP")
+                    .and_then(|r| r.detail.split_whitespace().next())
+                    .map(|s| s.to_string());
+
+                let trace = ui::run_with_spinner(
+                    "Running traceroute for a more precise path analysis — this may take ~30 s",
+                    trace::run_trace(target.host),
+                )
+                .await;
+
+                if let Some((tool, output)) = trace {
                     ui::print_trace(tool, target.host, &output);
+                    if let Some(ref ip) = exit_ip {
+                        ui::print_exit_ip_warning(ip, &output);
+                    }
                 }
                 match ui::prompt() {
                     ui::Choice::Continue => std::process::exit(0),
