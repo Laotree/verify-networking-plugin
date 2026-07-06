@@ -1,6 +1,7 @@
 use std::io::IsTerminal;
 
 mod checks;
+mod proxy;
 mod trace;
 mod ui;
 
@@ -11,6 +12,20 @@ async fn main() {
     }
 
     let args: Vec<String> = std::env::args().skip(1).collect();
+
+    // --daemon: run as TCP CONNECT proxy for per-call network checks
+    if args.iter().any(|a| a == "--daemon" || a == "-d") {
+        let port = args
+            .iter()
+            .position(|a| a == "--port" || a == "-p")
+            .and_then(|i| args.get(i + 1))
+            .and_then(|s| s.parse::<u16>().ok());
+        if let Err(e) = proxy::run_daemon(port).await {
+            eprintln!("Daemon error: {}", e);
+            std::process::exit(1);
+        }
+        return;
+    }
 
     // --non-interactive: plain-text output, no /dev/tty prompt, structured exit codes.
     // Used by the Codex desktop app wrapper.
@@ -73,6 +88,7 @@ async fn main() {
                 match ui::prompt() {
                     ui::Choice::Continue => std::process::exit(0),
                     ui::Choice::Retry => eprintln!(),
+                    ui::Choice::BlockSession => std::process::exit(0),
                     ui::Choice::Quit => {
                         eprintln!("  Aborted.");
                         std::process::exit(1);
