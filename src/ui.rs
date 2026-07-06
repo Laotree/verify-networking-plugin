@@ -13,6 +13,7 @@ pub enum Choice {
     Continue,
     Retry,
     Quit,
+    BlockSession,
 }
 
 /// Plain-text render for non-interactive (GUI wrapper) mode — no ANSI codes.
@@ -140,7 +141,7 @@ pub fn prompt() -> Choice {
     }
 }
 
-fn overall_status(results: &[CheckResult]) -> Status {
+pub fn overall_status(results: &[CheckResult]) -> Status {
     let has_fail = results.iter().any(|r| r.status == CheckStatus::Fail);
     let has_warn = results.iter().any(|r| r.status == CheckStatus::Warn);
     if has_fail {

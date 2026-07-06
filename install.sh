@@ -414,6 +414,36 @@ _install_badged_icon() {
 create_codex_app_wrapper
 create_claude_app_wrapper
 
+# ---------------------------------------------------------------------------
+# Daemon / per-call proxy setup (optional)
+# ---------------------------------------------------------------------------
+DAEMON_PORT=8443
+setup_daemon_proxy() {
+    local rc="$1"
+    local daemon_marker="# verify-networking-daemon"
+    if grep -qF "$daemon_marker" "$rc" 2>/dev/null; then
+        echo "→ Daemon proxy env vars already present in $rc"
+    else
+        cat >> "$rc" << DAEOS
+
+# verify-networking-daemon
+# Export proxy env vars for per-call network checking via the daemon.
+# To enable: uncomment the lines below.
+# To start the daemon:
+#   verify-networking --daemon [--port ${DAEMON_PORT}]
+#
+# export https_proxy=http://127.0.0.1:${DAEMON_PORT}
+# export all_proxy=http://127.0.0.1:${DAEMON_PORT}
+DAEOS
+        echo "→ Added daemon proxy config (commented out) to $rc"
+    fi
+}
+
+# Add daemon proxy env vars to RC files (commented out by default)
+for rc_file in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile"; do
+    [[ -f "$rc_file" ]] && setup_daemon_proxy "$rc_file" || true
+done
+
 # Git pre-push hook — blocks direct pushes to main/master
 GIT_DIR="$(git -C "$SCRIPT_DIR" rev-parse --git-dir 2>/dev/null || true)"
 if [[ -n "$GIT_DIR" ]]; then
@@ -426,6 +456,17 @@ fi
 echo ""
 echo "✓ Done. Network check runs before every Claude and Codex session"
 echo "  (CLI wrappers + detected alias wrappers + desktop app wrappers)."
+echo ""
+echo "  🔷 New: Daemon mode for per-call network checking"
+echo "  Start the daemon:"
+echo "    verify-networking --daemon [--port 8443]"
+echo ""
+echo "  Then configure your tools to use the proxy:" 
+echo "    export https_proxy=http://127.0.0.1:8443"
+echo "    claude --proxy http://127.0.0.1:8443"
+echo ""
+echo "  The daemon intercepts each API request, checks the network,"
+echo "  and holds the connection if a risk is detected — awaiting your confirmation."
 echo ""
 echo "  To remove:"
 echo "    • Delete the claude() / codex() functions from your shell RC"
