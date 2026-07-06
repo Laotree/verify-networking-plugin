@@ -2,9 +2,20 @@
 
 # verify-networking
 
-Network pre-flight check for AI CLI tools — runs before **Claude Code** and **Codex CLI** start, verifying DNS resolution, exit IP region, and TCP connectivity with 🟢🟡🔴 status.
+Network pre-flight check for AI CLI tools — runs before **Claude Code** and **Codex CLI** start, and can run as a **daemon proxy** to intercept every API request.
+
+Two modes:
+
+| Mode | When it runs | What it does |
+|------|-------------|--------------|
+| 🚀 **Startup** | Before `claude`/`codex` launches (shell wrapper) | Full network check + traceroute; `[C]ontinue [R]etry [Q]uit` |
+| 🌐 **Daemon** | Before each API request (TCP CONNECT proxy) | Full network check; hold connection on risk; `[C]ontinue [R]etry [B]lock [Q]uit` |
+
+---
 
 ## How It Works
+
+### Startup Mode (default)
 
 `install.sh` adds shell wrapper functions to your RC file that intercept `claude` and `codex` invocations before the process starts:
 
@@ -24,7 +35,7 @@ codex() {
 
 Each wrapper passes its tool name as an argument so the binary knows which API endpoint to probe.
 
-Before either tool starts, three checks run concurrently:
+Before either tool starts, three checks run concurrently. Targets differ by tool:
 
 | Check | Claude target | Codex target |
 |-------|--------------|--------------|
@@ -37,6 +48,28 @@ Before either tool starts, three checks run concurrently:
 | 🟢 Green | All checks passed | Tool starts immediately |
 | 🟡 Yellow | Concerns (high latency / partial loss) | Prompts `[C]ontinue [R]etry [Q]uit` |
 | 🔴 Red | Hard failure (DNS / blocked region / no connectivity) | Prompts `[C]ontinue [R]etry [Q]uit` |
+
+### Daemon Mode (per-call) — v0.2.0+
+
+The daemon runs an **HTTP CONNECT proxy** that listens on `127.0.0.1:<port>` (default 8443) and intercepts every API request to `api.anthropic.com:443` and `api.openai.com:443`. Before each connection is proxied, the full network check runs:
+
+- **All green** → proxy transparently (connection proceeds)
+- **Risk detected** → hold the connection, prompt user:
+  - `[C]ontinue` — allow this connection
+  - `[R]etry` — refuse, client will retry (triggers a re-check)
+  - `[B]lock session` — block all further connections to this host until daemon restarts
+  - `[Q]uit` — close the connection
+
+```bash
+# Terminal 1: start the daemon
+verify-networking --daemon [--port 8443]
+
+# Terminal 2: configure tools to use the proxy
+export https_proxy=http://127.0.0.1:8443
+claude --proxy http://127.0.0.1:8443
+```
+
+The daemon coexists with the startup mode — use both for full coverage, or just one.
 
 ## Installation
 
@@ -183,6 +216,61 @@ Type `claude` or `codex` as usual. The check runs automatically before every ses
 
 Without nali the trace shows the same hops but with bare IPs and no geolocation annotations, and the header reads `(via traceroute)` instead of `(via traceroute + nali)`.
 
+## Daemon Mode (per-call proxy)
+
+Start the daemon in a terminal:
+
+```bash
+verify-networking --daemon
+# or with a custom port
+verify-networking --daemon --port 9999
+```
+
+Output:
+
+```
+  🌐 Network check daemon started
+  Listening on 127.0.0.1:8443
+  Monitoring: api.anthropic.com, api.openai.com
+
+  Configure your tools to use this HTTP proxy:
+    export https_proxy=http://127.0.0.1:8443
+    export all_proxy=http://127.0.0.1:8443
+    claude --proxy http://127.0.0.1:8443 ...
+
+  Press Ctrl+C to stop the daemon
+```
+
+### Client configuration
+
+| Client | Configuration |
+|--------|--------------|
+| Claude Code | `export https_proxy=http://127.0.0.1:8443` or `claude --proxy http://127.0.0.1:8443` |
+| Codex CLI | `export https_proxy=http://127.0.0.1:8443` |
+| Claude Desktop app | System network proxy → HTTP proxy → `127.0.0.1:8443` |
+| Any HTTPS client | `export https_proxy=http://127.0.0.1:8443` |
+
+### Risk detected — connection held
+
+```
+  🔍 Checking network for connection from 127.0.0.1:54321 to api.anthropic.com...
+    🟢 DNS            api.anthropic.com → 18.165.56.1
+    🔴 Exit IP        1.2.3.4 [CN] AS12345 Example ISP — Claude unavailable in this region
+    🟢 Connectivity   api.anthropic.com avg 201ms  loss 0%
+
+  ⚠️  Network risk detected — connection from 127.0.0.1:54321 to api.anthropic.com is held
+
+  [C]ontinue  [R]etry  [B]lock session  [Q]uit ›
+```
+
+### Session block
+
+Choosing `B` blocks all further connections to the same host until the daemon is restarted:
+
+```
+  🔒 Blocked connection from 127.0.0.1:54322 to api.anthropic.com (session blocked)
+```
+
 ## Build
 
 ```bash
@@ -203,4 +291,7 @@ make hooks    # install git pre-push hook
 rm ~/.claude/plugins/verify-networking
 
 # Remove shell functions — delete the claude() and codex() blocks from ~/.zshrc (or ~/.bashrc)
+
+# Remove daemon proxy env vars — delete or comment the # verify-networking-daemon block
+# from ~/.zshrc (or ~/.bashrc)
 ```

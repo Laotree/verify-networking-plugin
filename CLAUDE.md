@@ -13,6 +13,25 @@ cargo clippy                   # lint
 To test the binary directly:
 ```bash
 ./target/release/verify-networking; echo "exit: $?"
+
+# Test daemon mode (starts proxy, Ctrl+C to stop)
+./target/release/verify-networking --daemon
+
+# Test daemon mode with custom port
+./target/release/verify-networking --daemon --port 9999
+```
+
+## Makefile targets
+
+```bash
+make          # debug build
+make release  # release build
+make test     # run tests
+make lint     # clippy
+make fmt      # format source
+make clean    # remove build artifacts
+make install  # build + install + patch shell RC
+make hooks    # install git pre-push hook
 ```
 
 ## Architecture
@@ -50,6 +69,27 @@ The tool name (`claude` / `codex`) is passed as the first argument so the binary
 **UI** (`src/ui.rs`): All output goes to stderr. While the trace runs, an animated braille spinner is shown so the user knows a slow probe (up to 30 s) is in progress; the spinner line is cleared before the hop list prints. Interactive prompts (`[C]ontinue [R]etry [Q]uit`) read from `/dev/tty` so they work even when stdin is redirected.
 
 **Exit codes**: 0 = proceed (shell function runs `command claude "$@"`), 1 = abort (user quit, shell function returns 1).
+
+### Daemon / Proxy Mode (`src/proxy.rs`) — v0.2.0
+
+The daemon runs as an HTTP CONNECT proxy on `127.0.0.1:<port>` (default 8443). It accepts CONNECT requests from any client and proxies TCP connections to the real target.
+
+**Monitored hosts**: `api.anthropic.com:443` and `api.openai.com:443`. All other CONNECT targets are proxied transparently without network checks.
+
+**Connection flow**:
+1. Client sends `CONNECT api.anthropic.com:443 HTTP/1.1`
+2. Daemon checks session block list (per-session, persisted in `Arc<Mutex<SessionState>>`)
+3. If not blocked → runs `checks::run_all(target)`
+4. If all green → `HTTP/1.1 200 Connection Established` → `tokio::io::copy_bidirectional`
+5. If risk detected → holds the connection → prompts via `/dev/tty`:
+   - `Continue` → proxy connection
+   - `Retry` → `HTTP 503 Service Unavailable` (client retries)
+   - `BlockSession` → add host to session block list → `HTTP 403 Forbidden`
+   - `Quit` → `HTTP 403 Forbidden`
+
+**`Choice::BlockSession`** is consumed only in daemon mode; in startup mode it exits 0 (proceed).
+
+**Launch**: `verify-networking --daemon [--port PORT] [codex]`. Parsed in `main.rs` before the startup check logic.
 
 ---
 

@@ -1,8 +1,8 @@
 [package]
 name = "verify-networking"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
-description = "Network pre-flight check for Claude Code and Codex CLI — verifies DNS, exit IP region, and TCP connectivity"
+description = "Network pre-flight check for Claude Code and Codex CLI — startup check + per-call daemon proxy with DNS, exit IP region, and TCP connectivity verification"
 license = "MIT"
 
 [[bin]]
