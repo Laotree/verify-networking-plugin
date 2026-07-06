@@ -3,6 +3,8 @@ name = "verify-networking"
 version = "0.2.0"
 edition = "2021"
 description = "Network pre-flight check for Claude Code and Codex CLI — startup check + per-call daemon proxy with DNS, exit IP region, and TCP connectivity verification"
+homepage = "https://github.com/Laotree/verify-networking-plugin"
+repository = "https://github.com/Laotree/verify-networking-plugin"
 license = "MIT"
 
 [[bin]]
