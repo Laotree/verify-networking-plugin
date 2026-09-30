@@ -1,6 +1,5 @@
 use std::net::ToSocketAddrs;
 use std::time::{Duration, Instant};
-use serde::Deserialize;
 use tokio::net::TcpStream;
 use tokio::time::timeout;
 
@@ -19,18 +18,23 @@ pub struct Target {
     pub host: &'static str,
     /// `host:port` string used for TCP probes.
     pub addr: &'static str,
+    /// Service-owned Cloudflare trace endpoint used to observe the egress IP
+    /// for traffic that matches this service's routing rules.
+    pub trace_url: &'static str,
 }
 
 pub const CLAUDE: Target = Target {
     tool_name: "Claude",
     host: "api.anthropic.com",
     addr: "api.anthropic.com:443",
+    trace_url: "https://api.anthropic.com/cdn-cgi/trace",
 };
 
 pub const CODEX: Target = Target {
     tool_name: "Codex",
     host: "api.openai.com",
     addr: "api.openai.com:443",
+    trace_url: "https://api.openai.com/cdn-cgi/trace",
 };
 
 #[derive(Debug)]
@@ -47,15 +51,12 @@ pub enum Status {
     Fail,
 }
 
-#[derive(Deserialize)]
-struct IpInfo {
-    ip: String,
-    country: Option<String>,
-    org: Option<String>,
-}
-
 fn error_result(name: &'static str) -> CheckResult {
-    CheckResult { name, status: Status::Fail, detail: "Internal error".to_string() }
+    CheckResult {
+        name,
+        status: Status::Fail,
+        detail: "Internal error".to_string(),
+    }
 }
 
 pub async fn run_all(target: &'static Target) -> Vec<CheckResult> {
@@ -93,7 +94,10 @@ fn check_dns(target: &Target) -> CheckResult {
 }
 
 async fn check_ip(target: &Target) -> CheckResult {
-    let client = match reqwest::Client::builder().timeout(Duration::from_secs(8)).build() {
+    let client = match reqwest::Client::builder()
+        .timeout(Duration::from_secs(8))
+        .build()
+    {
         Ok(c) => c,
         Err(e) => {
             return CheckResult {
@@ -104,38 +108,70 @@ async fn check_ip(target: &Target) -> CheckResult {
         }
     };
 
-    match client.get("https://ipinfo.io/json").send().await {
-        Ok(resp) => match resp.json::<IpInfo>().await {
-            Ok(info) => {
-                let country = info.country.as_deref().unwrap_or("??");
-                let org = info.org.as_deref().unwrap_or("unknown");
-                if BLOCKED_COUNTRIES.contains(&country) {
+    // Do not use a generic IP echo service here: split-routing can send
+    // ipinfo.io and Claude/OpenAI through different outbounds. Instead ask a
+    // trace endpoint on the target service itself, so the returned `ip=` is
+    // the egress address actually used for traffic matching that service.
+    match client.get(target.trace_url).send().await {
+        Ok(resp) => match resp.text().await {
+            Ok(body) => {
+                let mut ip = None;
+                let mut country = None;
+                let mut colo = None;
+                for line in body.lines() {
+                    if let Some((key, value)) = line.split_once('=') {
+                        match key {
+                            "ip" => ip = Some(value.trim().to_string()),
+                            "loc" => country = Some(value.trim().to_uppercase()),
+                            "colo" => colo = Some(value.trim().to_string()),
+                            _ => {}
+                        }
+                    }
+                }
+
+                let ip = match ip {
+                    Some(v) if !v.is_empty() => v,
+                    _ => {
+                        return CheckResult {
+                            name: "Exit IP",
+                            status: Status::Warn,
+                            detail: format!("Cannot parse service trace from {}", target.trace_url),
+                        }
+                    }
+                };
+                let country = country.unwrap_or_else(|| "??".to_string());
+                let colo = colo.unwrap_or_else(|| "?".to_string());
+
+                if BLOCKED_COUNTRIES.contains(&country.as_str()) {
                     CheckResult {
                         name: "Exit IP",
                         status: Status::Fail,
                         detail: format!(
-                            "{} [{}] {} — {} unavailable in this region",
-                            info.ip, country, org, target.tool_name
+                            "{} [{}] colo={} — {} unavailable in this region",
+                            ip, country, colo, target.tool_name
                         ),
                     }
                 } else {
                     CheckResult {
                         name: "Exit IP",
                         status: Status::Ok,
-                        detail: format!("{} [{}] {}", info.ip, country, org),
+                        detail: format!(
+                            "{} [{}] colo={} via {}",
+                            ip, country, colo, target.trace_url
+                        ),
                     }
                 }
             }
             Err(e) => CheckResult {
                 name: "Exit IP",
                 status: Status::Warn,
-                detail: format!("Cannot parse ipinfo.io response: {}", e),
+                detail: format!("Cannot read service trace response: {}", e),
             },
         },
         Err(e) => CheckResult {
             name: "Exit IP",
             status: Status::Warn,
-            detail: format!("Cannot reach ipinfo.io: {}", e),
+            detail: format!("Cannot reach service trace {}: {}", target.trace_url, e),
         },
     }
 }
