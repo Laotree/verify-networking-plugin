@@ -138,12 +138,6 @@ async fn handle_connection(
             }
             _ => {
                 // Risk detected — hold and prompt
-                let _exit_ip = results
-                    .iter()
-                    .find(|r| r.name == "Exit IP")
-                    .and_then(|r| r.detail.split_whitespace().next())
-                    .map(|s| s.to_string());
-
                 eprintln!();
                 let choice = prompt_daemon(peer_addr, target_host);
 

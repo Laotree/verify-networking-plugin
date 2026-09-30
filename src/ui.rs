@@ -109,13 +109,13 @@ where
     result
 }
 
-pub fn print_exit_ip_warning(exit_ip: &str, trace_output: &str) {
+pub fn print_exit_ip_warning(host: &str, exit_ip: &str, trace_output: &str) {
     if !trace_output.contains(exit_ip) {
         eprintln!(
             "  {}",
             format!(
-                "Note: exit IP {} not seen in trace hops — the route to this host may differ from the route ipinfo.io observed.",
-                exit_ip
+                "Note: exit IP {} not seen in trace hops — the route to {} may differ from the route the service saw.",
+                exit_ip, host
             )
             .yellow()
         );

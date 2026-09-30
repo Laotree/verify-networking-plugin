@@ -40,7 +40,7 @@ Before either tool starts, three checks run concurrently. Targets differ by tool
 | Check | Claude target | Codex target |
 |-------|--------------|--------------|
 | **DNS** | `api.anthropic.com` | `api.openai.com` |
-| **Exit IP** | `ipinfo.io` — blocks CN, HK, KP, CU, IR, SY, RU, BY | same |
+| **Exit IP** | `api.anthropic.com/cdn-cgi/trace` — blocks CN, HK, KP, CU, IR, SY, RU, BY | `api.openai.com/cdn-cgi/trace` — same |
 | **Connectivity** | 3 × TCP to `api.anthropic.com:443` | 3 × TCP to `api.openai.com:443` |
 
 | Status | Meaning | Behaviour |
@@ -150,7 +150,7 @@ Type `claude` or `codex` as usual. The check runs automatically before every ses
   Checking...
 
   🟢 DNS            api.anthropic.com → 18.165.56.1
-  🟢 Exit IP        1.2.3.4 [US] AS12345 Example ISP
+  🟢 Exit IP        1.2.3.4 [US] colo=SJC via https://api.anthropic.com/cdn-cgi/trace
   🟢 Connectivity   api.anthropic.com avg 217ms  loss 0%
 
   🟢 All checks passed.
@@ -164,7 +164,7 @@ Type `claude` or `codex` as usual. The check runs automatically before every ses
   Checking...
 
   🟢 DNS            api.openai.com → 104.18.7.192
-  🟢 Exit IP        1.2.3.4 [US] AS12345 Example ISP
+  🟢 Exit IP        1.2.3.4 [US] colo=SJC via https://api.openai.com/cdn-cgi/trace
   🟢 Connectivity   api.openai.com avg 183ms  loss 0%
 
   🟢 All checks passed.
@@ -178,7 +178,7 @@ Type `claude` or `codex` as usual. The check runs automatically before every ses
   Checking...
 
   🟢 DNS            api.anthropic.com → 18.165.56.1
-  🟡 Exit IP        1.2.3.4 [US] AS12345 Example ISP
+  🟡 Exit IP        1.2.3.4 [US] colo=SJC via https://api.anthropic.com/cdn-cgi/trace
   🟡 Connectivity   api.anthropic.com avg 612ms  loss 0%
 
   🟡 Network concerns detected.
@@ -194,7 +194,7 @@ Type `claude` or `codex` as usual. The check runs automatically before every ses
   Checking...
 
   🟢 DNS            api.anthropic.com → 18.165.56.1
-  🔴 Exit IP        1.2.3.4 [HK] AS9304 Example ISP — Claude unavailable in this region
+  🔴 Exit IP        1.2.3.4 [HK] colo=HKG — Claude unavailable in this region
   🟢 Connectivity   api.anthropic.com avg 201ms  loss 0%
 
   🔴 Network issues detected.
@@ -209,7 +209,7 @@ Type `claude` or `codex` as usual. The check runs automatically before every ses
    5  141.101.72.19 [美国加利福尼亚州洛杉矶 CloudFlare节点]   210 ms  213 ms  211 ms
    6  18.165.56.1 [美国]   200 ms  201 ms  200 ms
 
-  Note: exit IP 1.2.3.4 not seen in trace hops — the route to this host may differ from the route ipinfo.io observed.
+  Note: exit IP 1.2.3.4 not seen in trace hops — the route to api.anthropic.com may differ from the route the service saw.
 
   [C]ontinue  [R]etry  [Q]uit ›
 ```
@@ -255,7 +255,7 @@ Output:
 ```
   🔍 Checking network for connection from 127.0.0.1:54321 to api.anthropic.com...
     🟢 DNS            api.anthropic.com → 18.165.56.1
-    🔴 Exit IP        1.2.3.4 [CN] AS12345 Example ISP — Claude unavailable in this region
+    🔴 Exit IP        1.2.3.4 [CN] colo=SJC — Claude unavailable in this region
     🟢 Connectivity   api.anthropic.com avg 201ms  loss 0%
 
   ⚠️  Network risk detected — connection from 127.0.0.1:54321 to api.anthropic.com is held

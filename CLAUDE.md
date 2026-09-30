@@ -54,17 +54,17 @@ codex() {
 
 The tool name (`claude` / `codex`) is passed as the first argument so the binary knows which API endpoint to probe. This ensures the network check runs before either tool makes any outbound requests.
 
-**Checks** (`src/checks.rs`): All three run concurrently via `tokio::join!`. Targets differ by tool:
+**Checks** (`src/checks.rs`): All three run concurrently via `tokio::join!`. Targets differ by tool. The exit IP comes from a trace endpoint on the target service itself, because split routing can send a third-party IP echo service and the target service through different outbounds. A trace without both an egress IP and a country is reported as Warn, so the region check never passes on an unknown region.
 
 | Check | Claude target | Codex target |
 |-------|--------------|--------------|
 | DNS | `api.anthropic.com` | `api.openai.com` |
-| Exit IP | `ipinfo.io/json` — blocks CN/HK/KP/CU/IR/SY/RU/BY | same |
+| Exit IP | `api.anthropic.com/cdn-cgi/trace` — blocks CN/HK/KP/CU/IR/SY/RU/BY | `api.openai.com/cdn-cgi/trace` — same |
 | Connectivity | 3 × TCP to `api.anthropic.com:443`, 5 s timeout | 3 × TCP to `api.openai.com:443`, 5 s timeout |
 
 **Status thresholds**: Fail = DNS error / blocked country / 100% TCP loss. Warn = partial TCP loss or avg latency >500ms. Overall: Red if any Fail, Yellow if any Warn, Green if all Ok.
 
-**Trace** (`src/trace.rs`): On any non-green result, runs `mtr --report --no-dns -c 3` (preferred) or `traceroute -n` toward the API host. If [nali](https://github.com/zu1k/nali) is on `$PATH`, output is piped through it to annotate each hop IP with geolocation data; the trace header then reads `mtr + nali` or `traceroute + nali`. Falls back silently to plain output if nali is absent or times out (5 s guard). After printing the hops, if the exit IP from the `ipinfo.io` check is absent from the trace output, a warning is shown — this indicates the route to the API host differs from the route ipinfo.io observed (common with transparent proxies or split-tunnel VPNs).
+**Trace** (`src/trace.rs`): On any non-green result, runs `mtr --report --no-dns -c 3` (preferred) or `traceroute -n` toward the API host. If [nali](https://github.com/zu1k/nali) is on `$PATH`, output is piped through it to annotate each hop IP with geolocation data; the trace header then reads `mtr + nali` or `traceroute + nali`. Falls back silently to plain output if nali is absent or times out (5 s guard). After printing the hops, if the exit IP from the exit IP check is absent from the trace output, a warning naming the API host is shown — this indicates the route the traceroute observed differs from the route the service saw (common with transparent proxies or split-tunnel VPNs).
 
 **UI** (`src/ui.rs`): All output goes to stderr. While the trace runs, an animated braille spinner is shown so the user knows a slow probe (up to 30 s) is in progress; the spinner line is cleared before the hop list prints. Interactive prompts (`[C]ontinue [R]etry [Q]uit`) read from `/dev/tty` so they work even when stdin is redirected.
 
