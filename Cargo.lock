@@ -735,7 +735,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9a8e94ea7f378bd32cbbd37198a4a91436180c5bb472411e48b5ec2e2124ae9e"
 dependencies = [
  "serde_core",
- "serde_derive",
 ]
 
 [[package]]
@@ -1049,11 +1048,10 @@ checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
 
 [[package]]
 name = "verify-networking"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "colored",
  "reqwest",
- "serde",
  "serde_json",
  "tokio",
 ]
